@@ -91,8 +91,8 @@ List NormalPointMixtureSummary(NumericVector x, NumericVector x_vars,
   
       // TODO: make this generic with a function pointer.
       probs(row_i, col_i) = log_prior_probs(col_i) -
-                            0.5 * (means(col_i) * (means(col_i) -
-                                   2 * x(row_i))) / (vars(col_i) + x_vars(row_i));
+                            0.5 * pow(x(row_i) - means(col_i), 2) / (vars(col_i) + x_vars(row_i)) -
+                            0.5 * log(vars(col_i) + x_vars(row_i));
       if (probs(row_i, col_i) > row_maxima(row_i)) {
         row_maxima(row_i) = probs(row_i, col_i);
       }
@@ -112,7 +112,7 @@ List NormalPointMixtureSummary(NumericVector x, NumericVector x_vars,
     for (col_i = 0; col_i < mean_length; col_i++) {
       probs(row_i, col_i) = probs(row_i, col_i) / row_totals(row_i);
       x_summary(col_i) +=  row_weights(row_i) * x(row_i) * probs(row_i, col_i);
-      x2_summary(col_i) += row_weights(row_i) * x(row_i) * x(row_i) * probs(row_i, col_i);
+      x2_summary(col_i) += row_weights(row_i) * pow(x(row_i), 2) * probs(row_i, col_i);
       prob_summary(col_i) += row_weights(row_i) * probs(row_i, col_i);
     }
   }
