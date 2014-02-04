@@ -22,7 +22,16 @@ REvaluateDensity <- function(x, means, vars, probs) {
 }
 
 
-EMMixtureOfNormals <- function(x, means, vars,
+RDrawPointMixture <- function(n, means, vars, probs, noise.var=0) {
+  k <- length(means)  
+  components <- t(rmultinom(n, prob=probs, size=1))
+  x.means <- components %*% matrix(means)
+  x.vars <- components %*% matrix(vars) + noise.var
+  return(rnorm(n, mean=x.means, sd=sqrt(x.vars)))
+}
+
+
+EMMixtureOfNormals <- function(x, means, vars, x.vars=rep(0, length(x)),
                                log.prior.probs=rep(-log(length(means)), length(means)),
                                row.weights=rep(1, length(x)),
                                fit.means=T, fit.vars=F, fit.probs=F,
@@ -50,7 +59,7 @@ EMMixtureOfNormals <- function(x, means, vars,
   cdf <- old.cdf <- REvaluateCDF(check.points, means, vars, exp(log.prior.probs))
   converged <- F
   while(!converged) {
-    result  <- NormalPointMixtureSummary(x=x, x_vars=rep(0, length(x)),
+    result  <- NormalPointMixtureSummary(x=x, x_vars=x.vars,
                                          means=means, vars=vars, probs=probs,
                                          log_prior_probs=log.prior.probs,
                                          row_weights=row.weights)
@@ -59,7 +68,6 @@ EMMixtureOfNormals <- function(x, means, vars,
       if (any(is.na(means))) { print("bad means"); browser() }
     }
     if (fit.vars) {
-      # This seems to be incorrect
       kMinVar <- 1e-6
       ex <- result$x / result$prob_tot
       vars <- result$x2 / result$prob_tot - (ex)^2
@@ -70,7 +78,6 @@ EMMixtureOfNormals <- function(x, means, vars,
       kMinProb <- 1e-6
       log.prior.probs <- log((result$prob_tot + kMinProb) / sum(result$prob_tot + kMinProb))
       if (any(is.na(log.prior.probs))) { browser() }
-      
     }
     
     # Check for convergence
