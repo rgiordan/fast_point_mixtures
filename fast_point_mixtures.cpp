@@ -118,87 +118,97 @@ List NormalPointMixtureSummary(NumericVector x, NumericVector x_vars,
 }
 
 
-// [[Rcpp::export]]
-List PointMixtureSummary(NumericVector x, NumericVector x_vars,
-                         NumericVector means, NumericVector vars,
-                         NumericMatrix probs, NumericVector log_prior_probs,
-                         NumericVector row_weights) {
-  // Returns a matrix of as many rows as the length of <x> and as many columns
-  // as the lengths of <means> and <vars>.
-  
-  int x_length = x.size(); 
-  int mean_length = means.size();
-  int vars_length = vars.size();
-  
-  RcppAssert(mean_length == vars_length,
-             "The mean and variance must be the same length.");
-                          
-  RcppAssert(log_prior_probs.size() == mean_length,
-             "Wrong length for log_prior_probs.");
-  
-  RcppAssert(probs.ncol() == mean_length,
-             "Wrong number of columns in probs.");
 
-  RcppAssert(probs.nrow() == x_length,
-             "Wrong number of rows in probs.");
+
+
+List PointMixtureSummary(NumericMatrix observations,
+                         NumericMatrix parameters,
+                         NumericMatrix probs,
+                         NumericVector log_prior_probs,
+                         NumericVector row_weights,
+                         double (*LogLikelihood)(NumericVector, NumericVector)) {
+                           
+
+  // Returns a matrix of as many rows as <observations> and as many columns
+  // as there are rows in <observations>.
+  
+  int obs_length = observations.nrow(); 
+  int param_length = parameters.nrow();
              
-  RcppAssert(row_weights.size() == x_length,
+  RcppAssert(row_weights.size() == obs_length,
              "Wrong length for row_weights.");
-             
-  RcppAssert(x_vars.size() == x_length,
-             "Wrong length for x_vars.");
 
-  NumericVector row_maxima(x_length);
-  NumericVector row_totals(x_length);
-
-  NumericVector x_summary(mean_length);
-  NumericVector x2_summary(mean_length);
-  NumericVector prob_summary(mean_length);
+  NumericVector row_maxima(obs_length);
+  NumericVector row_totals(obs_length);
+  
+  NumericMatrix summary_stats(param_length, observations.ncol());
+  NumericVector prob_summary(param_length);
   
   int row_i = 0;
   int col_i = 0;
 
   // Calculate the log likelihoods.
-  for (row_i = 0; row_i < x_length; row_i++) {
-    for (col_i = 0; col_i < mean_length; col_i++) {
-      
+  for (row_i = 0; row_i < obs_length; row_i++) {
+    for (col_i = 0; col_i < param_length; col_i++) {
+
       // TODO: you can eliminate an entire pass through the matrix by being smarter
       // about the totals.  In this first pass through the columns, exponentiate and
       // keep track of the total.  If you come to a number that will cause an over or
       // underflow, multiply both the total and all future values by a scalar that
       // brings it within a usable range.  Keep track of the scalar and keep modifying
       // it as needed to prevent over and underflows.
-  
-      // TODO: make this generic with a function pointer.
-      probs(row_i, col_i) = log_prior_probs(col_i) -
-                            0.5 * pow(x(row_i) - means(col_i), 2) / (vars(col_i) + x_vars(row_i)) -
-                            0.5 * log(vars(col_i) + x_vars(row_i));
+
+      probs(row_i, col_i) = log_prior_probs(col_i) +
+                            LogLikelihood(observations(row_i, _),
+                                          parameters(col_i, _));
+
       if (probs(row_i, col_i) > row_maxima(row_i)) {
         row_maxima(row_i) = probs(row_i, col_i);
       }
     }
   }
-  
+
   // Exponentiate.
-  for (row_i = 0; row_i < x_length; row_i++) {
-    for (col_i = 0; col_i < mean_length; col_i++) {
+  for (row_i = 0; row_i < obs_length; row_i++) {
+    for (col_i = 0; col_i < param_length; col_i++) {
       probs(row_i, col_i) = exp(probs(row_i, col_i) - row_maxima(row_i));
       row_totals(row_i) += probs(row_i, col_i);
     }
   }
   
   // Normalize.
-  for (row_i = 0; row_i < x_length; row_i++) {
-    for (col_i = 0; col_i < mean_length; col_i++) {
+  for (row_i = 0; row_i < obs_length; row_i++) {
+    for (col_i = 0; col_i < param_length; col_i++) {
       probs(row_i, col_i) = probs(row_i, col_i) / row_totals(row_i);
-      x_summary(col_i) +=  row_weights(row_i) * x(row_i) * probs(row_i, col_i);
-      x2_summary(col_i) += row_weights(row_i) *
-                           (pow(x(row_i), 2) - x_vars(row_i)) * probs(row_i, col_i);
+      summary_stats(col_i, _) = summary_stats(col_i, _) + 
+                                row_weights(row_i) * probs(row_i, col_i) * observations(row_i, _);
       prob_summary(col_i) += row_weights(row_i) * probs(row_i, col_i);
     }
   }
   
-  return Rcpp::List::create(Rcpp::Named("x") = x_summary,
-                            Rcpp::Named("x2") = x2_summary,
-                            Rcpp::Named("prob_tot") = prob_summary);
+  return List::create(Named("summary_stats") = summary_stats,
+                      Named("prob_tot") = prob_summary);
+
+}
+
+
+double NormalLogLikelihood(NumericVector x, NumericVector parameters) {
+  // parameters(0) is the mean
+  // parameters(1) is the variance
+  return -0.5 * (pow(x(0) - parameters(0), 2) / parameters(1) + log(parameters(1)));
+}
+
+
+// [[Rcpp::export]]
+List NormalPointMixtureSummaryFP(NumericMatrix observations,
+                         NumericMatrix parameters,
+                         NumericMatrix probs,
+                         NumericVector log_prior_probs,
+                         NumericVector row_weights) {
+  return PointMixtureSummary(observations,
+                             parameters,
+                             probs,
+                             log_prior_probs,
+                             row_weights,
+                             NormalLogLikelihood);                         
 }

@@ -4,8 +4,8 @@ library(microbenchmark)
 library(ggplot2)
 sourceCpp("fast_point_mixtures.cpp")
 
-N <- 10000
-k <- 10
+N <- 1e2
+k <- 3
 true.means <- 1:k
 true.vars <- rep(0.1^2, k)
 true.probs <- rep(1, k)
@@ -18,6 +18,26 @@ x.means <- components %*% matrix(true.means)
 x.vars <- components %*% matrix(true.vars) + noise.var
 x <- rnorm(N, mean=x.means, sd=sqrt(x.vars))
 var(x[x.means == 1])
+
+
+means <- true.means
+vars <- true.vars
+log.prior.probs <- log(true.probs)
+probs <- matrix(0, N, k)
+
+microbenchmark(results <- NormalPointMixtureSummary(x=x, x_vars=rep(0, N),
+                                     means=means, vars=vars, probs=probs,
+                                     log_prior_probs=log.prior.probs,
+                                     row_weights=rep(1, N)))
+
+observations <- cbind(x, x^2)
+parameters <- cbind(means, vars)
+microbenchmark(results.fp <- NormalPointMixtureSummaryFP(observations=observations,
+                                           parameters=parameters,
+                                           probs=probs,
+                                           log_prior_probs=log.prior.probs,
+                                           row_weights=rep(1, N)))
+
 
 #ggplot() +
 #  geom_line(aes(x=x, y=REvaluateDensity(x, true.means, true.vars, true.probs), color="true"), lwd=2) +

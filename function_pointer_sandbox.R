@@ -7,8 +7,12 @@ library(ggplot2)
 
 sourceCpp("function_pointer_sandbox.cpp")
 
-N <- 1e5
+
+N <- 1e2
 x <- matrix(1:(2 * N), ncol=2)
+
+foo <- MatrixPointer(x)
+
 
 microbenchmark(Raw(x))
 microbenchmark(AddProduct(x))

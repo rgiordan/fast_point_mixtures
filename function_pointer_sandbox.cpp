@@ -14,6 +14,20 @@ NumericVector RawDouble(NumericVector x_mat, int x_length) {
 */
 
 
+NumericMatrix MatrixPointerFirstElement(NumericMatrix* x_pointer) {
+  NumericMatrix x = *x_pointer;
+  return (x)(1,1);
+}
+
+// [[Rcpp::export]]
+NumericMatrix MatrixPointer(NumericMatrix x) {
+  return MatrixPointerFirstElement(&x);
+}
+
+
+
+
+
 // [[Rcpp::export]]
 NumericVector Raw(NumericMatrix x) {
   NumericVector result(1);
@@ -31,7 +45,7 @@ double CProduct(NumericVector x) {
   return x(0) * x(1);
 }
 
-NumericVector WithFun(NumericMatrix x, double (*CombineFun)(NumericVector)) {
+NumericVector WithFun(NumericMatrix x, double (*CombineFun)(NumericVector z)) {
   NumericVector result(1);
   for (int i = 0; i < x.rows(); i++) {
     result = result + CombineFun(x(i, _));
