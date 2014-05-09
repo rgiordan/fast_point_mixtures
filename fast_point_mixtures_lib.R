@@ -1,7 +1,6 @@
 
-setwd("~/Documents/fast_point_mixtures")
 library(Rcpp)
-sourceCpp("fast_point_mixtures.cpp")
+sourceCpp("~/Documents/fast_point_mixtures/fast_point_mixtures.cpp")
 
 
 REvaluateCDF <- function(x, means, vars, probs) {
