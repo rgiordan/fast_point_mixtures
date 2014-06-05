@@ -1,6 +1,6 @@
-
+kRepoLocation <- Sys.getenv("GIT_REPO_LOC")
 library(Rcpp)
-sourceCpp("~/Documents/fast_point_mixtures/fast_point_mixtures.cpp")
+sourceCpp(file.path(kRepoLocation, "fast_point_mixtures/fast_point_mixtures.cpp"))
 
 
 REvaluateCDF <- function(x, means, vars, probs) {
