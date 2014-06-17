@@ -1,6 +1,13 @@
 #include <Rcpp.h>
 #include <assert.h>
+#include <math.h>
+#include <iostream>
+
 using namespace Rcpp;
+
+void DebugLine(std::string s) {
+  std::cout << s << "\n";
+}
 
 void RcppAssert(bool expression, const char *message) {
   if (!expression) {
@@ -128,19 +135,21 @@ List PointMixtureSummary(NumericMatrix observations,
                          NumericVector row_weights,
                          double (*LogLikelihood)(NumericVector, NumericVector)) {
                            
-
   // Returns a matrix of as many rows as <observations> and as many columns
-  // as there are rows in <observations>.
+  // as there are rows in <parameters>.
   
   int obs_length = observations.nrow(); 
   int param_length = parameters.nrow();
              
   RcppAssert(row_weights.size() == obs_length,
              "Wrong length for row_weights.");
+             
+  RcppAssert(log_prior_probs.size() == param_length,
+             "Wrong length for log_prior_progs.");
 
   NumericVector row_maxima(obs_length);
   NumericVector row_totals(obs_length);
-  
+
   NumericMatrix summary_stats(param_length, observations.ncol());
   NumericVector prob_summary(param_length);
   
@@ -175,8 +184,11 @@ List PointMixtureSummary(NumericMatrix observations,
       row_totals(row_i) += probs(row_i, col_i);
     }
   }
-  
-  // Normalize.
+
+  // Normalize and build summary stats.  The summary stats are simply weighted
+  // averages of the observations.  As such, if you need an additional summary
+  // stat, just add it to your observations matrix and have your likelihood
+  // function ignore it.
   for (row_i = 0; row_i < obs_length; row_i++) {
     for (col_i = 0; col_i < param_length; col_i++) {
       probs(row_i, col_i) = probs(row_i, col_i) / row_totals(row_i);
@@ -191,24 +203,61 @@ List PointMixtureSummary(NumericMatrix observations,
 
 }
 
-
+// This is only really exported for debugging and sanity checking.
+// [[Rcpp::export]]
 double NormalLogLikelihood(NumericVector x, NumericVector parameters) {
-  // parameters(0) is the mean
-  // parameters(1) is the variance
+  // x is single number representing the observation.
+  // parameters(0) is the mean, parameters(1) is the variance
+  
   return -0.5 * (pow(x(0) - parameters(0), 2) / parameters(1) + log(parameters(1)));
 }
 
 
 // [[Rcpp::export]]
 List NormalPointMixtureSummaryFP(NumericMatrix observations,
-                         NumericMatrix parameters,
-                         NumericMatrix probs,
-                         NumericVector log_prior_probs,
-                         NumericVector row_weights) {
+                                 NumericMatrix parameters,
+                                 NumericMatrix probs,
+                                 NumericVector log_prior_probs,
+                                 NumericVector row_weights) {
   return PointMixtureSummary(observations,
                              parameters,
                              probs,
                              log_prior_probs,
                              row_weights,
                              NormalLogLikelihood);                         
+}
+
+
+// This is only really exported for debugging and sanity checking.
+// [[Rcpp::export]]
+double DirichletLogLikelihood(NumericVector x, NumericVector parameters) {
+  // x is vector representing the observation.
+  // parameters is a vector of the same length reperesenting the parameters
+    
+  double alpha_total = 0.0;
+  double lgamma_alpha_total = 0.0;
+  double natural_parameters_total = 0.0;
+  
+  for (int i = 0; i < parameters.size(); i++) {
+    alpha_total += parameters[i];
+    natural_parameters_total += (parameters[i] - 1) * log(x[i]);
+    lgamma_alpha_total += lgamma(parameters[i]);
+  }
+  
+  return natural_parameters_total - lgamma_alpha_total + lgamma(alpha_total);
+}
+
+
+// [[Rcpp::export]]
+List DirichletPointMixtureSummaryFP(NumericMatrix observations,
+                                    NumericMatrix alpha,
+                                    NumericMatrix probs,
+                                    NumericVector log_prior_probs,
+                                    NumericVector row_weights) {
+  return PointMixtureSummary(observations,
+                             alpha,
+                             probs,
+                             log_prior_probs,
+                             row_weights,
+                             DirichletLogLikelihood);                         
 }

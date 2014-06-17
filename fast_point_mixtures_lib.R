@@ -1,7 +1,7 @@
 
-setwd("~/Documents/fast_point_mixtures")
+#setwd("~/Documents/fast_point_mixtures")
 library(Rcpp)
-sourceCpp("fast_point_mixtures.cpp")
+sourceCpp("~/Documents/fast_point_mixtures/fast_point_mixtures.cpp")
 
 
 REvaluateCDF <- function(x, means, vars, probs) {
@@ -125,7 +125,96 @@ EMMixtureOfNormals <- function(x, means, vars, x.vars=rep(0, length(x)),
 }
 
 
+FitDirichletFromSufficientStats <- function(sum.log.x, n, alpha.start) {
+  DiricheltSuffStatLogLikelihood <- function(sum.log.x, n, alpha) {
+    return(sum(sum.log.x * (alpha - 1)) + n * (lgamma(sum(alpha)) - sum(lgamma(alpha))))
+  }
+  
+  # Check the sufficient statistic function
+  #DiricheltSuffStatLogLikelihood(colSums(log(x)), N, alpha)
+  #sum(log(ddirichlet(x, alpha)))
+  
+  DiricheltSuffStatLogLikelihoodForOptim <- function(par) {
+    return(-DiricheltSuffStatLogLikelihood(sum.log.x, n, exp(par)))
+  }
+  optim.result <- optim(log(alpha.start), DiricheltSuffStatLogLikelihoodForOptim)
+  return(exp(optim.result$par))
+}
 
+
+
+
+# Ummm upon refleciton this doesn't make any sense.  A mixture of dirichlets
+# is dirichlet.  You may as well just fit a single dirichlet to the whole data
+# set if this is your intention.
+#
+# ---- actually I think I misunderstood something in the notes from class.  This
+# deserves more thought.
+EMMixtureOfDirichlet <- function(x, alpha,
+                               log.prior.probs=rep(-log(length(means)), length(means)),
+                               row.weights=rep(1, length(x)),
+                               fit.alpha=T, fit.probs=F,
+                               verbose=T, max.iters=1e6,
+                               num.check.points=min(c(100, length(x))),
+                               check.convergence.every=10) {
+  # Parameters:
+  #   x:       A matrix with a row for each observation.
+  #   alpha:   A matrix with as many columns as x and as many rows as there
+  #            are components in the mixture.
+  
+  
+  if (!any(c(fit.alpha, fit.probs))) {
+    stop("You must fit the parameters or probs.")
+  }
+  
+  # Intialize
+  iter <- 0
+  k <- ncol(alpha)
+  stopifnot(k == ncol(x))
+  N <- nrow(x)
+  
+  if (fit.alpha) {
+    # If we're fitting alpha, we need log(x) as summary statistics.
+    x <- cbind(x, log(x))
+  }
+  
+  probs <- matrix(0, ncol=k, nrow=N)
+  converged <- F
+  while(!converged) {
+    result  <- DirichletPointMixtureSummary(observations=x, alpha=alpha,
+                                            probs=probs,
+                                            log_prior_probs=log.prior.probs,
+                                            row_weights=row.weights)
+    if (fit.alpha) {
+      # The first 1:k columns of the summary stats have x,
+      # and the last (k+1):2k columns have log(x)
+
+      alpha <- FitDirichletFromSufficientStats(result$summary_stats[, (k+1):(2 * k)],
+                                               n=result$prob_tot,
+                                               alpha.start=alpha)
+      if (any(is.na(alpha))) { print("bad means"); browser() }
+    }
+    if (fit.probs) {
+      kMinProb <- 1e-6
+      log.prior.probs <- log((result$prob_tot + kMinProb) / sum(result$prob_tot + kMinProb))
+      if (any(is.na(log.prior.probs))) { browser() }
+    }
+    
+    # Check for convergence
+    if (iter %% check.convergence.every == 0) {
+      
+    }
+    iter <- iter + 1
+    if (iter > max.iters) {
+      if (verbose) {
+        print("Converged due to maximum iterations reached.")
+      }
+      converged <- T
+    }
+  }
+  return(list(probs=probs, alpha=alpha,,
+              log.prior.probs=log.prior.probs, iter=iter))
+}
 
 
 
